@@ -872,13 +872,22 @@ Odpověz VÝHRADNĚ jako čistý JSON objekt, bez markdown formátování (žád
     // MODUL 3: E-MAIL
     // ------------------------------------------------------------------
     document.getElementById('sendMailBtn').addEventListener('click', (e) => {
-      e.preventDefault();
-      const to = document.getElementById('clientEmail').value.trim();
-      const subject = document.getElementById('mailSubject').value.trim() || 'Shrnutí naší schůzky';
-      const body = document.getElementById('mailBodyText').value;
-      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(gmailUrl, '_blank');
-    });
+  e.preventDefault();
+  const to = document.getElementById('clientEmail').value.trim();
+  const subject = document.getElementById('mailSubject').value.trim() || 'Shrnutí naší schůzky';
+  const body = document.getElementById('mailBodyText').value;
+
+  const isApple = /iPhone|iPad|iPod|Macintosh/i.test(navigator.userAgent);
+
+  if (isApple) {
+    // Na Apple zařízení otvíráme čisté mailto pro systémovou poštu
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  } else {
+    // Na PC otevřeme webový Gmail
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(gmailUrl, '_blank');
+  }
+});
 
     document.getElementById('copyMailBtn').addEventListener('click', async () => {
       const body = document.getElementById('mailBodyText').value;

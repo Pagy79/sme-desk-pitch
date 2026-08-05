@@ -876,7 +876,8 @@ Odpověz VÝHRADNĚ jako čistý JSON objekt, bez markdown formátování (žád
       const to = document.getElementById('clientEmail').value.trim();
       const subject = document.getElementById('mailSubject').value.trim() || 'Shrnutí naší schůzky';
       const body = document.getElementById('mailBodyText').value;
-      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(gmailUrl, '_blank');
     });
 
     document.getElementById('copyMailBtn').addEventListener('click', async () => {

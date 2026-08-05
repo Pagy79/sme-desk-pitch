@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SME Desk Pitch & CRM Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { background: #020617; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .glass { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(16px); border: 1px solid rgba(148, 163, 184, 0.14); }
+    .loader { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #22d3ee; border-radius: 999px; animation: spin 0.75s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="min-h-screen pb-16">
+  <header class="border-b border-slate-800 bg-slate-950/80 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 grid place-items-center rounded-xl bg-cyan-400/10 text-cyan-300 font-bold border border-cyan-400/20">S</div>
+        <div>
+          <h1 class="text-sm font-bold text-white">SME Desk Pitch & CRM Hub</h1>
+          <p class="text-[10px] text-slate-400">Bankovní analytický a terénní nástroj</p>
+        </div>
+      </div>
+      <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs gap-1">
+        <button id="navPitch" onclick="switchTab('pitch')" class="px-3 py-1.5 rounded-lg bg-cyan-300 text-slate-950 font-bold transition">1. Pitch</button>
+        <button id="navCrm" onclick="switchTab('crm')" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition">2. Zápis</button>
+        <button id="navMail" onclick="switchTab('mail')" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition">3. E-mail</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- MODUL 1: PITCH -->
+    <div id="sectionPitch" class="space-y-6">
+      <div class="glass rounded-3xl p-6 sm:p-8 shadow-xl">
+        <h2 class="text-2xl font-black text-white mb-2">Příprava schůzky</h2>
+        <p class="text-sm text-slate-400 mb-6">Zadejte IČO nebo název firmy pro načtení dat z ARES.</p>
+        <form id="searchForm" class="flex flex-col sm:flex-row gap-3">
+          <input id="query" type="text" placeholder="Např. 27579212" class="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400" />
+          <button type="submit" id="searchButton" class="rounded-2xl bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 hover:bg-cyan-200 transition">Vyhledat</button>
+        </form>
+        <div id="errorBox" class="mt-4 hidden rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-200"></div>
+      </div>
+
+      <div id="loadingSection" class="hidden glass rounded-3xl p-12 text-center text-slate-400">
+        <div class="loader mx-auto mb-2"></div> Načítám data z ARES...
+      </div>
+
+      <div id="dashboard" class="hidden space-y-6">
+        <div class="glass rounded-3xl p-6 space-y-4">
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 id="dashboardTitle" class="text-xl font-bold text-white"></h2>
+              <p id="dashboardSubtitle" class="text-xs text-slate-400 font-mono mt-1"></p>
+            </div>
+            <button id="resetButton" class="border border-slate-700 text-xs px-3 py-1.5 rounded-xl hover:border-cyan-400">Nové hledání</button>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 text-sm pt-4 border-t border-slate-800">
+            <div><span class="text-xs uppercase text-slate-500 block">Sídlo</span><span id="clientAddress" class="text-slate-200"></span></div>
+            <div><span class="text-xs uppercase text-slate-500 block">Právní forma</span><span id="clientLegalForm" class="text-slate-200"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODUL 2: ZÁPIS Z AUTA -->
+    <div id="sectionCrm" class="space-y-6 hidden">
+      <div class="glass rounded-3xl p-6 sm:p-8 space-y-4">
+        <h2 class="text-2xl font-black text-white">Zápis z auta po schůzce</h2>
+        <p class="text-sm text-slate-400">Nadiktujte nebo zapište výstupy z jednání.</p>
+        <textarea id="voiceInput" rows="5" placeholder="Zápis ze schůzky..." class="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-sm text-white outline-none focus:border-cyan-400"></textarea>
+        <div class="flex gap-3">
+          <button onclick="startListening()" class="border border-slate-700 bg-slate-900 px-5 py-3 rounded-2xl text-sm font-bold text-slate-200 hover:border-cyan-400">🎤 Diktovat</button>
+          <button onclick="processCrmAndMail()" class="flex-1 bg-cyan-300 text-slate-950 font-black px-6 py-3 rounded-2xl hover:bg-cyan-200">Zpracovat výstupy</button>
+        </div>
+      </div>
+      <div class="glass rounded-3xl p-6">
+        <h3 class="text-sm font-bold text-cyan-300 uppercase mb-3">Vygenerovaný CRM Zápis</h3>
+        <div id="crmOutputText" class="bg-slate-950 p-4 rounded-2xl font-mono text-xs text-slate-300 whitespace-pre-wrap border border-slate-800">Zatím prázdné.</div>
+      </div>
+    </div>
+
+    <!-- MODUL 3: E-MAIL -->
+    <div id="sectionMail" class="space-y-6 hidden">
+      <div class="glass rounded-3xl p-6 sm:p-8 space-y-4">
+        <h2 class="text-2xl font-black text-white">Follow-up e-mail klientovi</h2>
+        <div>
+          <label class="block text-xs uppercase text-slate-500 mb-1">E-mail klienta</label>
+          <input type="email" id="clientEmail" value="klient@firma.cz" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white" />
+        </div>
+        <div>
+          <label class="block text-xs uppercase text-slate-500 mb-1">Tělo e-mailu</label>
+          <textarea id="mailBodyText" rows="8" class="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 font-mono text-xs text-slate-300"></textarea>
+        </div>
+        <a id="sendMailBtn" href="#" class="block bg-emerald-400 text-slate-950 font-black text-center py-3 rounded-2xl hover:bg-emerald-300">Odeslat v mailovém klientovi ↗️</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function switchTab(tab) {
+      ['pitch', 'crm', 'mail'].forEach(t => {
+        const cap = t.charAt(0).toUpperCase() + t.slice(1);
+        document.getElementById('section' + cap).classList.toggle('hidden', t !== tab);
+        document.getElementById('nav' + cap).className = (t === tab) ? "px-3 py-1.5 rounded-lg bg-cyan-300 text-slate-950 font-bold transition" : "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition";
+      });
+    }
+
+    const API_BASE = "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest";
+
+    document.getElementById('searchForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = document.getElementById('query').value.trim();
+      if (!q) return;
+      document.getElementById('loadingSection').classList.remove('hidden');
+      document.getElementById('dashboard').classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/ekonomicke-subjekty/${q.padStart(8, '0')}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+
+        document.getElementById('dashboardTitle').textContent = data.obchodniJmeno;
+        document.getElementById('dashboardSubtitle').textContent = `IČO: ${data.ico}`;
+        const s = data.sidlo || {};
+        document.getElementById('clientAddress').textContent = `${s.nazevUlice || ''} ${s.cisloDomovni || ''}, ${s.nazevObce || ''}`;
+        document.getElementById('clientLegalForm').textContent = data.pravniForma || 'Neuvedeno';
+
+        document.getElementById('loadingSection').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+      } catch(err) {
+        document.getElementById('loadingSection').classList.add('hidden');
+        alert('Subjekt se nepodařilo načíst.');
+      }
+    });
+
+    function startListening() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { alert('Hlasové rozpoznávání není podporováno.'); return; }
+      const rec = new SR();
+      rec.lang = 'cs-CZ';
+      rec.onresult = e => { document.getElementById('voiceInput').value = e.results[0][0].transcript; };
+      rec.start();
+    }
+
+    function processCrmAndMail() {
+      const val = document.getElementById('voiceInput').value.trim();
+      if (!val) return;
+      document.getElementById('crmOutputText').textContent = `[ZÁPIS Z TERÉNU]\n• Jednání: ${val}\n• Další krok: Odeslat nabídku`;
+      document.getElementById('mailBodyText').value = `Dobrý den,\n\nděkuji za dnešní schůzku. Shrnutí:\n- ${val}\n\nVáš bankéř`;
+      switchTab('crm');
+    }
+
+    document.getElementById('resetButton').addEventListener('click', () => {
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('query').value = '';
+    });
+
+    document.getElementById('sendMailBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      const to = document.getElementById('clientEmail').value.trim();
+      const body = document.getElementById('mailBodyText').value;
+      const subject = 'Shrnutí naší schůzky';
+      window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    });
+  </script>
+</body>
+</html>

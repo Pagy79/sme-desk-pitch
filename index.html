@@ -1,31 +1,790 @@
-function buildCrmSystemPrompt() {
-  return `Jsi asistent firemního bankéře. Z jeho surové, hovorové poznámky ze schůzky s klientem vytvoříš tři výstupy: "crmRecord", "emailSubject" a "emailBody".
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SME Desk Pitch & CRM Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body {
+      background:
+        radial-gradient(circle at 15% 10%, rgba(34, 211, 238, .07), transparent 28rem),
+        radial-gradient(circle at 90% 15%, rgba(167, 139, 250, .07), transparent 26rem),
+        #020617;
+      color: #f8fafc;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    .glass { background: rgba(15, 23, 42, .82); backdrop-filter: blur(16px); border: 1px solid rgba(148, 163, 184, .14); }
+    .loader { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.2); border-top-color: #22d3ee; border-radius: 999px; animation: spin .75s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn .35s ease-out both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .label { margin-bottom: .35rem; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgb(100 116 139); }
+    .value { color: rgb(226 232 240); font-size: .9rem; line-height: 1.5; }
+    textarea, input { color-scheme: dark; }
+  </style>
+</head>
+<body class="min-h-screen pb-16">
 
-=== 1) CRM ZÁPIS ("crmRecord") ===
-PRAVIDLO – jazyk: Převeď surové poznámky z terénu do profesionálního bankovního jazyka ve 3. osobě, spisovnou češtinou.
-PRAVIDLO – slang: Odstraň veškeré hovorové výrazy a slang. Příklady:
-  "orbisáci" / "orbisákama" → "zástupci společnosti [název firmy]"
-  "teďka nic nepotřebuju" → "aktuálně bez nových požadavků"
-PRAVIDLO – struktura: Zápis má přesně tuto strukturu, každá položka na vlastním řádku:
-Datum: <dnešní datum ve formátu DD.MM.RRRR>
-Klient: <název firmy, pokud je znám, jinak "Neuvedeno">
-Jednání: <profesionální shrnutí obsahu schůzky ve 2–4 gramaticky správných větách>
-Další krok: <viz pravidlo níže>
-PRAVIDLO – logika dalšího kroku: "Další krok" musí logicky vyplývat z obsahu poznámky, NIKDY nesmí být obecný natvrdo vložený text jako "Odeslat nabídku".
-  Příklad A: Pokud klient nemá aktuální poptávku a je domluveno ozvat se později → "Další krok" je konkrétní follow-up k danému termínu, např. "Kontaktovat na konci září".
-  Příklad B: Pokud klient vyjádřil konkrétní zájem nebo požadavek → "Další krok" je splnění tohoto požadavku (např. "Připravit nabídku – investiční úvěr").
+  <header class="border-b border-slate-800 bg-slate-950/80 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 grid place-items-center rounded-xl bg-cyan-400/10 text-cyan-300 font-bold border border-cyan-400/20">S</div>
+        <div>
+          <h1 class="text-sm font-bold text-white">SME Desk Pitch <span class="text-cyan-300">&amp;</span> CRM Hub</h1>
+          <p class="text-[10px] text-slate-400">Bankovní analytický a terénní nástroj</p>
+        </div>
+      </div>
 
-=== 2) FOLLOW-UP E-MAIL KLIENTOVI ("emailBody" + "emailSubject") ===
-PRAVIDLO – tón: Napiš reprezentativní obchodní e-mail v business češtině – vykání, formální a zdvořilý tón.
-PRAVIDLO – obsah: E-mail NESMÍ obsahovat žádné interní poznámky, bankovní žargon ani slang. Je to text, který jde přímo klientovi.
-PRAVIDLO – struktura (přesně v tomto pořadí):
-  1. Zdvořilé oslovení ("Dobrý den,")
-  2. Poděkování za schůzku
-  3. Potvrzení dohodnutého termínu dalšího kontaktu (odvozeno z "Další krok")
-  4. Profesionální rozloučení ("S pozdravem,") – bez konkrétního jména bankéře, to doplní uživatel
-"emailSubject" je krátký, výstižný předmět e-mailu v češtině.
+      <div id="activeClientBadge" class="hidden items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1.5 text-xs text-cyan-200">
+        <span class="h-1.5 w-1.5 rounded-full bg-cyan-300"></span>
+        <span id="activeClientName" class="font-semibold"></span>
+      </div>
 
-=== FORMÁT ODPOVĚDI ===
-Odpověz VÝHRADNĚ jako čistý JSON objekt, bez markdown formátování (žádné \`\`\`json bloky) a bez jakéhokoli textu okolo, přesně v tomto tvaru:
-{"crmRecord": "...", "emailSubject": "...", "emailBody": "..."}`;
-}
+      <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs gap-1">
+        <button id="navPitch" onclick="switchTab('pitch')" class="px-3 py-1.5 rounded-lg font-bold transition">1. Pitch</button>
+        <button id="navCrm" onclick="switchTab('crm')" class="px-3 py-1.5 rounded-lg font-bold transition">2. Zápis</button>
+        <button id="navMail" onclick="switchTab('mail')" class="px-3 py-1.5 rounded-lg font-bold transition">3. E-mail</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- ============ MODUL 1: PITCH ============ -->
+    <div id="sectionPitch" class="space-y-6">
+      <div class="glass rounded-3xl p-6 sm:p-8 shadow-xl">
+        <h2 class="text-2xl font-black text-white mb-2">Příprava schůzky</h2>
+        <p class="text-sm text-slate-400 mb-6">Zadejte IČO nebo název firmy pro načtení veřejných dat z ARES.</p>
+        <form id="searchForm" class="flex flex-col sm:flex-row gap-3">
+          <label for="query" class="sr-only">IČO nebo název firmy</label>
+          <input id="query" type="text" autocomplete="off" placeholder="Např. 27579212 nebo ACME s.r.o." class="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20" />
+          <button type="submit" id="searchButton" class="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 hover:bg-cyan-200 transition disabled:cursor-not-allowed disabled:opacity-60">
+            <span id="searchSpinner" class="loader hidden"></span>
+            <span id="searchButtonText">Vyhledat</span>
+          </button>
+        </form>
+        <div id="errorBox" class="mt-4 hidden rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"></div>
+      </div>
+
+      <div id="resultsSection" class="hidden space-y-3 fade-in">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-white">Vyberte subjekt</h3>
+          <span id="resultCount" class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400"></span>
+        </div>
+        <div id="resultsList" class="grid gap-3 md:grid-cols-2"></div>
+      </div>
+
+      <div id="loadingSection" class="hidden glass rounded-3xl p-12 text-center text-slate-400">
+        <div class="loader mx-auto mb-2"></div> Načítám data z ARES…
+      </div>
+
+      <div id="dashboard" class="hidden space-y-6 fade-in">
+        <div class="glass rounded-3xl p-6 space-y-4">
+          <div class="flex flex-wrap justify-between items-start gap-3">
+            <div>
+              <h2 id="dashboardTitle" class="text-xl font-bold text-white"></h2>
+              <p id="dashboardSubtitle" class="text-xs text-slate-400 font-mono mt-1"></p>
+            </div>
+            <button id="resetButton" type="button" class="border border-slate-700 text-xs px-3 py-1.5 rounded-xl hover:border-cyan-400 hover:text-cyan-300 transition">Nové hledání</button>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm pt-4 border-t border-slate-800">
+            <div><p class="label">Sídlo</p><p id="clientAddress" class="value"></p></div>
+            <div><p class="label">Právní forma</p><p id="clientLegalForm" class="value"></p></div>
+            <div><p class="label">DIČ</p><p id="clientDic" class="value"></p></div>
+            <div><p class="label">Datum vzniku</p><p id="clientFounded" class="value"></p></div>
+          </div>
+        </div>
+
+        <div class="grid gap-5 lg:grid-cols-12">
+          <article class="glass rounded-3xl p-5 lg:col-span-5">
+            <div class="mb-4">
+              <p class="text-xs uppercase tracking-widest text-slate-500">Byznys hypotéza</p>
+              <h3 class="mt-1 text-lg font-bold text-white">Co může klient řešit?</h3>
+            </div>
+            <div class="rounded-2xl border border-violet-300/20 bg-violet-300/10 p-4">
+              <div id="hypothesisBadge" class="mb-3 inline-flex rounded-full bg-violet-300/15 px-3 py-1 text-xs font-bold text-violet-200"></div>
+              <p id="hypothesisText" class="text-sm leading-6 text-slate-300"></p>
+              <div class="mt-4 border-t border-violet-200/10 pt-4">
+                <p class="text-xs font-semibold uppercase tracking-wider text-violet-200/70">Doporučené otázky</p>
+                <ul id="hypothesisQuestions" class="mt-2 space-y-2 text-sm text-slate-300"></ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="glass rounded-3xl p-5 lg:col-span-7">
+            <div class="mb-4">
+              <p class="text-xs uppercase tracking-widest text-slate-500">Rejstřík</p>
+              <h3 class="mt-1 text-lg font-bold text-white">Předmět podnikání</h3>
+            </div>
+            <div id="activities" class="space-y-2"></div>
+          </article>
+
+          <article class="glass rounded-3xl p-5 lg:col-span-7">
+            <div class="mb-4">
+              <p class="text-xs uppercase tracking-widest text-slate-500">Statutární orgán</p>
+              <h3 class="mt-1 text-lg font-bold text-white">Vedení společnosti</h3>
+            </div>
+            <div id="management" class="space-y-3"></div>
+          </article>
+
+          <article class="glass rounded-3xl p-5 lg:col-span-5">
+            <div class="mb-4">
+              <p class="text-xs uppercase tracking-widest text-slate-500">Due diligence</p>
+              <h3 class="mt-1 text-lg font-bold text-white">Přímé odkazy</h3>
+            </div>
+            <div id="actionLinks" class="grid gap-3"></div>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MODUL 2: ZÁPIS Z AUTA ============ -->
+    <div id="sectionCrm" class="space-y-6 hidden">
+      <div class="glass rounded-3xl p-6 sm:p-8 space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="text-2xl font-black text-white">Zápis z auta po schůzce</h2>
+          <span id="crmClientHint" class="hidden text-xs text-cyan-300 font-mono"></span>
+        </div>
+        <p class="text-sm text-slate-400">Nadiktujte nebo zapište výstupy z jednání — aplikace z nich sestaví strukturovaný CRM zápis a návrh follow-up e-mailu.</p>
+        <textarea id="voiceInput" rows="5" placeholder="Např. Klient zvažuje investiční úvěr na novou provozovnu, chce nabídku do konce měsíce…" class="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-sm text-white outline-none focus:border-cyan-400"></textarea>
+        <div id="voiceUnsupportedNote" class="hidden rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+          Hlasové rozpoznávání není v tomto prohlížeči podporováno — použijte prosím textové pole výše.
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button id="dictateButton" type="button" onclick="startListening()" class="border border-slate-700 bg-slate-900 px-5 py-3 rounded-2xl text-sm font-bold text-slate-200 hover:border-cyan-400 transition">🎤 Diktovat</button>
+          <button type="button" onclick="processCrmAndMail()" class="flex-1 bg-cyan-300 text-slate-950 font-black px-6 py-3 rounded-2xl hover:bg-cyan-200 transition">Zpracovat výstupy →</button>
+        </div>
+      </div>
+      <div class="glass rounded-3xl p-6">
+        <h3 class="text-sm font-bold text-cyan-300 uppercase mb-3">Vygenerovaný CRM zápis</h3>
+        <div id="crmOutputText" class="bg-slate-950 p-4 rounded-2xl font-mono text-xs text-slate-300 whitespace-pre-wrap border border-slate-800">Zatím prázdné — zapište poznámky výše a klikněte na „Zpracovat výstupy“.</div>
+      </div>
+    </div>
+
+    <!-- ============ MODUL 3: E-MAIL ============ -->
+    <div id="sectionMail" class="space-y-6 hidden">
+      <div class="glass rounded-3xl p-6 sm:p-8 space-y-4">
+        <h2 class="text-2xl font-black text-white">Follow-up e-mail klientovi</h2>
+        <div>
+          <label class="label" for="clientEmail">E-mail klienta</label>
+          <input type="email" id="clientEmail" placeholder="klient@firma.cz" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400" />
+        </div>
+        <div>
+          <label class="label" for="mailSubject">Předmět</label>
+          <input type="text" id="mailSubject" value="Shrnutí naší schůzky" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400" />
+        </div>
+        <div>
+          <label class="label" for="mailBodyText">Tělo e-mailu</label>
+          <textarea id="mailBodyText" rows="9" class="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 font-mono text-xs text-slate-300 outline-none focus:border-cyan-400"></textarea>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <a id="sendMailBtn" href="#" class="flex-1 bg-emerald-400 text-slate-950 font-black text-center py-3 rounded-2xl hover:bg-emerald-300 transition">Odeslat v mailovém klientovi ↗</a>
+          <button id="copyMailBtn" type="button" class="border border-slate-700 px-5 py-3 rounded-2xl text-sm font-bold text-slate-200 hover:border-cyan-400 transition">📋 Kopírovat text</button>
+        </div>
+        <p id="copyConfirm" class="hidden text-xs text-emerald-300">Zkopírováno do schránky.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="mx-auto max-w-7xl px-4 pb-8 pt-2 text-center text-xs text-slate-600">
+    Data pocházejí z veřejných registrů (ARES). Aplikace neslouží jako náhrada právního, úvěrového ani compliance posouzení.
+  </footer>
+
+  <script>
+    // ------------------------------------------------------------------
+    // STATE
+    // ------------------------------------------------------------------
+    const state = { ico: null, companyName: null };
+
+    // ------------------------------------------------------------------
+    // TAB NAVIGATION
+    // ------------------------------------------------------------------
+    const TAB_ACTIVE = "px-3 py-1.5 rounded-lg bg-cyan-300 text-slate-950 font-bold transition";
+    const TAB_INACTIVE = "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white font-bold transition";
+
+    function switchTab(tab) {
+      ['pitch', 'crm', 'mail'].forEach(t => {
+        const cap = t.charAt(0).toUpperCase() + t.slice(1);
+        const section = document.getElementById('section' + cap);
+        const nav = document.getElementById('nav' + cap);
+        if (section) section.classList.toggle('hidden', t !== tab);
+        if (nav) nav.className = (t === tab) ? TAB_ACTIVE : TAB_INACTIVE;
+      });
+    }
+    switchTab('pitch');
+
+    function updateActiveClientBadge() {
+      const badge = document.getElementById('activeClientBadge');
+      const name = document.getElementById('activeClientName');
+      if (state.companyName) {
+        name.textContent = state.companyName;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+      } else {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+      }
+      const crmHint = document.getElementById('crmClientHint');
+      if (state.companyName) {
+        crmHint.textContent = `Klient: ${state.companyName}`;
+        crmHint.classList.remove('hidden');
+      } else {
+        crmHint.classList.add('hidden');
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // NETWORK: robustní fetch s CORS fallbackem (ARES nemá CORS hlavičky)
+    // ------------------------------------------------------------------
+    const API_BASE = "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest";
+
+    function buildFetchOptions(options) {
+      return {
+        ...options,
+        headers: {
+          Accept: "application/json",
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          ...(options.headers || {})
+        }
+      };
+    }
+
+    async function fetchJsonWithFallback(url, options = {}) {
+      const attempts = [
+        () => fetch(url, buildFetchOptions(options)),
+        () => fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, buildFetchOptions(options))
+      ];
+      // allorigins podporuje jen GET (neumí přeposlat POST tělo)
+      if (!options.method || options.method === "GET") {
+        attempts.push(() => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { headers: { Accept: "application/json" } }));
+      }
+
+      let lastError = new Error("Neznámá chyba sítě");
+      for (const attempt of attempts) {
+        try {
+          const res = await attempt();
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError;
+    }
+
+    // ------------------------------------------------------------------
+    // POMOCNÉ FUNKCE
+    // ------------------------------------------------------------------
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function firstValue(...values) {
+      return values.find(v => v !== undefined && v !== null && String(v).trim() !== "");
+    }
+
+    function formatDate(value) {
+      if (!value) return "Neuvedeno";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat("cs-CZ").format(date);
+    }
+
+    function safeText(value, fallback = "Neuvedeno") {
+      const v = firstValue(value);
+      return v !== undefined ? String(v) : fallback;
+    }
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    function extractSearchItems(data) {
+      const possible = [data?.ekonomickeSubjekty, data?.results, data?.items, data?.data];
+      for (const item of possible) {
+        if (Array.isArray(item)) return item;
+      }
+      return [];
+    }
+
+    function normalizeAddress(subject) {
+      const s = subject?.sidlo || {};
+      const parts = [
+        s.nazevUlice,
+        s.cisloDomovni,
+        s.cisloOrientacni ? `/${s.cisloOrientacni}` : "",
+        s.nazevObce,
+        s.psc
+      ].filter(Boolean);
+      return parts.length ? parts.join(" ") : "Neuvedeno";
+    }
+
+    function findDeepValues(value, wantedKeys, output = []) {
+      if (!value || typeof value !== "object") return output;
+      if (Array.isArray(value)) {
+        value.forEach(item => findDeepValues(item, wantedKeys, output));
+        return output;
+      }
+      for (const [key, child] of Object.entries(value)) {
+        const normalized = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (wantedKeys.some(w => normalized.includes(w))) {
+          if (typeof child === "string" && child.trim()) {
+            output.push(child.trim());
+          } else if (Array.isArray(child)) {
+            child.forEach(item => {
+              if (typeof item === "string" && item.trim()) output.push(item.trim());
+              else if (item && typeof item === "object") {
+                const text = firstValue(item.text, item.hodnota, item.popis, item.nazev, item.jmeno, item.obchodniJmeno);
+                if (text) output.push(String(text).trim());
+              }
+            });
+          } else if (child && typeof child === "object") {
+            const text = firstValue(child.text, child.hodnota, child.popis, child.nazev, child.jmeno);
+            if (text) output.push(String(text).trim());
+          }
+        }
+        findDeepValues(child, wantedKeys, output);
+      }
+      return output;
+    }
+
+    function unique(values) {
+      return [...new Set(values.filter(Boolean))];
+    }
+
+    function extractActivities(vr) {
+      if (!vr) return [];
+      try {
+        const values = findDeepValues(vr, ["predmetpodnikani", "predmetcinnosti", "cinnost", "obor"]);
+        return unique(values).filter(v => v.length > 3).filter(v => !/^[0-9]+$/.test(v)).slice(0, 20);
+      } catch { return []; }
+    }
+
+    function extractManagement(vr) {
+      if (!vr) return [];
+      try {
+        const people = [];
+        function walk(value, context = "") {
+          if (!value || typeof value !== "object") return;
+          if (Array.isArray(value)) { value.forEach(item => walk(item, context)); return; }
+          const keys = Object.keys(value).map(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+          const looksLikePerson =
+            keys.some(k => k.includes("jmeno") || k.includes("prijmeni") || k.includes("osoba")) &&
+            keys.some(k => k.includes("funkce") || k.includes("role") || k.includes("pozice") || k.includes("clen"));
+          if (looksLikePerson) {
+            const name = firstValue(
+              value.jmeno, value.jméno, value.osoba?.jmeno, value.osoba?.jméno,
+              [value.jmeno, value.prijmeni].filter(Boolean).join(" "),
+              [value.jméno, value.příjmení].filter(Boolean).join(" ")
+            );
+            const role = firstValue(value.funkce, value.role, value.pozice, value.clenstvi, context, "Člen statutárního orgánu");
+            if (name) people.push({ name: String(name), role: String(role) });
+          }
+          for (const [key, child] of Object.entries(value)) {
+            const normalized = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const nextContext =
+              normalized.includes("jednatel") ? "Jednatel" :
+              normalized.includes("predstavenstvo") ? "Člen představenstva" :
+              normalized.includes("dozorci") ? "Člen dozorčí rady" :
+              normalized.includes("statutar") ? "Statutární orgán" : context;
+            walk(child, nextContext);
+          }
+        }
+        walk(vr);
+        const deduped = [];
+        const seen = new Set();
+        people.forEach(p => {
+          const key = `${p.name}|${p.role}`;
+          if (!seen.has(key)) { seen.add(key); deduped.push(p); }
+        });
+        return deduped.slice(0, 20);
+      } catch { return []; }
+    }
+
+    function estimateCompanyAge(subject) {
+      const founded = firstValue(subject?.datumVzniku, subject?.datumZahajeniCinnosti);
+      if (!founded) return null;
+      const date = new Date(founded);
+      if (Number.isNaN(date.getTime())) return null;
+      return Math.max(0, new Date().getFullYear() - date.getFullYear());
+    }
+
+    function buildHypothesis(subject, activitiesCount) {
+      const age = estimateCompanyAge(subject);
+      const diversified = activitiesCount >= 5;
+      const diversNote = diversified
+        ? " Firma má diverzifikovaný předmět podnikání (více oblastí činnosti) — vhodné probrat, zda a jak se v jednotlivých liniích liší cash-flow a financování."
+        : "";
+
+      if (age === null) {
+        return {
+          badge: "Rychlý discovery call",
+          text: "Datum vzniku se nepodařilo spolehlivě načíst. Zaměřte se na aktuální fázi firmy, cash-flow, sezónnost a plánované investice." + diversNote,
+          questions: ["Jaké jsou hlavní zdroje příjmů a platební cyklus?", "Plánujete v nejbližších 12 měsících investice nebo růst týmu?", "Kde dnes řešíte provozní financování?"]
+        };
+      }
+      if (age <= 3) {
+        return {
+          badge: `Startup / růstová firma · ${age} ${age === 1 ? "rok" : "roky"}`,
+          text: "Mladý subjekt může řešit základní bankovní infrastrukturu, provozní kapitál a financování rychlého růstu." + diversNote,
+          questions: ["Jak dlouhá je vaše runway a jak rychle rostou tržby?", "Potřebujete účet, platební bránu, kartu nebo kontokorent?", "Jaké investice plánujete v příštích 6–12 měsících?"]
+        };
+      }
+      if (age <= 10) {
+        return {
+          badge: `Růstová SME · ${age} let`,
+          text: "Firma je v období, kdy často škáluje obchod, tým nebo výrobní kapacitu. Vhodným tématem může být provozní limit, investiční úvěr, cash-management." + diversNote,
+          questions: ["Co je dnes hlavní limit dalšího růstu?", "Jaké máte největší sezónní výkyvy v cash-flow?", "Plánujete rozšíření kapacit, technologie nebo nemovitosti?"]
+        };
+      }
+      return {
+        badge: `Stabilní subjekt · ${age} let`,
+        text: "Dlouhodobě fungující firma může mít prostor pro optimalizaci bankovního vztahu, refinancování, investiční úvěr nebo sofistikovanější cash-management." + diversNote,
+        questions: ["Kdy naposledy jste obnovovali financování nebo investovali?", "Jak efektivně dnes řídíte přebytky a provozní likviditu?", "Máte více bank a dává smysl konsolidace služeb?"]
+      };
+    }
+
+    // ------------------------------------------------------------------
+    // ERROR / UI HELPERS
+    // ------------------------------------------------------------------
+    function showError(message) {
+      const box = document.getElementById('errorBox');
+      box.textContent = message;
+      box.classList.remove('hidden');
+    }
+    function clearError() {
+      const box = document.getElementById('errorBox');
+      box.textContent = '';
+      box.classList.add('hidden');
+    }
+    function setSearchLoading(isLoading) {
+      const btn = document.getElementById('searchButton');
+      btn.disabled = isLoading;
+      document.getElementById('searchSpinner').classList.toggle('hidden', !isLoading);
+      document.getElementById('searchButtonText').textContent = isLoading ? 'Vyhledávám…' : 'Vyhledat';
+    }
+
+    // ------------------------------------------------------------------
+    // RENDER: DASHBOARD
+    // ------------------------------------------------------------------
+    function renderDashboard(subject, vr) {
+      state.ico = safeText(subject.ico, state.ico || "");
+      state.companyName = safeText(subject.obchodniJmeno, "Neznámý subjekt");
+      updateActiveClientBadge();
+
+      setText('dashboardTitle', state.companyName);
+      setText('dashboardSubtitle', `IČO ${state.ico} · veřejný profil ekonomického subjektu`);
+      setText('clientAddress', normalizeAddress(subject));
+      setText('clientLegalForm', safeText(subject.pravniForma));
+      setText('clientDic', safeText(subject.dic));
+      const founded = firstValue(subject.datumVzniku, subject.datumZahajeniCinnosti);
+      setText('clientFounded', founded ? formatDate(founded) : "Neuvedeno");
+
+      const activities = extractActivities(vr);
+      const activitiesBox = document.getElementById('activities');
+      activitiesBox.innerHTML = activities.length
+        ? activities.map(a => `<div class="rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-3 text-sm leading-5 text-slate-300"><span class="mr-2 text-cyan-300">•</span>${escapeHtml(a)}</div>`).join('')
+        : `<div class="rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-3 text-sm text-slate-500">Předmět podnikání nebyl v dostupných datech nalezen.</div>`;
+
+      const management = extractManagement(vr);
+      const managementBox = document.getElementById('management');
+      managementBox.innerHTML = management.length
+        ? management.map(p => `
+            <div class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-3">
+              <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-300/10 text-sm font-bold text-violet-200">${escapeHtml(p.name.charAt(0).toUpperCase())}</div>
+              <div class="min-w-0">
+                <p class="font-semibold text-slate-200">${escapeHtml(p.name)}</p>
+                <p class="mt-0.5 text-xs text-slate-500">${escapeHtml(p.role)}</p>
+              </div>
+            </div>`).join('')
+        : `<div class="rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-3 text-sm text-slate-500">Statutární orgán nebyl v dostupných datech nalezen.</div>`;
+
+      const hypothesis = buildHypothesis(subject, activities.length);
+      setText('hypothesisBadge', hypothesis.badge);
+      setText('hypothesisText', hypothesis.text);
+      document.getElementById('hypothesisQuestions').innerHTML = hypothesis.questions
+        .map(q => `<li><span class="mr-2 text-violet-300">↗</span>${escapeHtml(q)}</li>`).join('');
+
+      const ico = state.ico;
+      const links = [
+        { title: "Hlídač státu", description: "Registr smluv a veřejné vazby", url: `https://www.hlidacstatu.cz/Subjekt/${encodeURIComponent(ico)}` },
+        { title: "Sbírka listin", description: "Dokumenty obchodního rejstříku", url: `https://or.justice.cz/ias/ui/rejstrik-$firma?ico=${encodeURIComponent(ico)}` },
+        { title: "ISIR", description: "Insolvenční rejstřík", url: `https://isir.justice.cz/isir/common/index.do?ic=${encodeURIComponent(ico)}` }
+      ];
+      document.getElementById('actionLinks').innerHTML = links.map(link => `
+        <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="group rounded-2xl border border-slate-800 bg-slate-950/45 p-4 transition hover:border-cyan-300/40 hover:bg-slate-800/70">
+          <div class="flex items-center justify-between gap-3">
+            <span class="font-bold text-slate-200 group-hover:text-cyan-300">${escapeHtml(link.title)}</span>
+            <span class="text-slate-600 group-hover:text-cyan-300">↗</span>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">${escapeHtml(link.description)}</p>
+        </a>`).join('');
+
+      document.getElementById('dashboard').classList.remove('hidden');
+      document.getElementById('dashboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ------------------------------------------------------------------
+    // RENDER: VÝSLEDKY VYHLEDÁVÁNÍ (podle názvu)
+    // ------------------------------------------------------------------
+    function renderResults(items) {
+      const list = document.getElementById('resultsList');
+      const count = document.getElementById('resultCount');
+      list.innerHTML = '';
+
+      if (!items.length) {
+        showError('Nic jsme nenašli. Zkuste upravit název firmy nebo zadejte přímo 8místné IČO.');
+        document.getElementById('resultsSection').classList.add('hidden');
+        return;
+      }
+
+      count.textContent = `${items.length} ${items.length === 1 ? 'výsledek' : 'výsledků'}`;
+
+      items.slice(0, 20).forEach(item => {
+        const ico = String(item.ico || '').padStart(8, '0');
+        const name = safeText(item.obchodniJmeno, 'Neznámý subjekt');
+        const address = normalizeAddress(item);
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'glass rounded-2xl p-4 text-left transition hover:border-cyan-300/50 hover:bg-slate-800/80';
+        button.innerHTML = `
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h4 class="font-bold text-white truncate">${escapeHtml(name)}</h4>
+              <p class="mt-1 font-mono text-xs text-cyan-300">${escapeHtml(ico)}</p>
+            </div>
+            <span class="shrink-0 text-slate-600">→</span>
+          </div>
+          <p class="mt-2 text-xs text-slate-500 truncate">${escapeHtml(address)}</p>
+        `;
+        button.addEventListener('click', () => loadSubjectData(ico));
+        list.appendChild(button);
+      });
+
+      document.getElementById('resultsSection').classList.remove('hidden');
+    }
+
+    // ------------------------------------------------------------------
+    // DATA LOADING
+    // ------------------------------------------------------------------
+    async function loadSubjectData(ico) {
+      clearError();
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('loadingSection').classList.remove('hidden');
+      document.getElementById('dashboard').classList.add('hidden');
+
+      try {
+        const [subject, vr] = await Promise.all([
+          fetchJsonWithFallback(`${API_BASE}/ekonomicke-subjekty/${ico}`),
+          fetchJsonWithFallback(`${API_BASE}/ekonomicke-subjekty-vr/${ico}`).catch(() => null)
+        ]);
+        renderDashboard(subject, vr);
+      } catch (err) {
+        console.error(err);
+        showError('Subjekt se nepodařilo načíst. Zkontrolujte IČO nebo to zkuste znovu za chvíli.');
+      } finally {
+        document.getElementById('loadingSection').classList.add('hidden');
+      }
+    }
+
+    async function searchByName(name) {
+      const data = await fetchJsonWithFallback(`${API_BASE}/ekonomicke-subjekty/vyhledat`, {
+        method: 'POST',
+        body: JSON.stringify({ start: 0, pocet: 20, obchodniJmeno: name })
+      });
+      return extractSearchItems(data);
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      clearError();
+      document.getElementById('resultsSection').classList.add('hidden');
+
+      const q = document.getElementById('query').value.trim();
+      if (!q) return;
+
+      if (/^\d+$/.test(q)) {
+        const ico = q.padStart(8, '0');
+        if (!/^\d{8}$/.test(ico)) {
+          showError('IČO musí obsahovat maximálně 8 číslic.');
+          return;
+        }
+        await loadSubjectData(ico);
+        return;
+      }
+
+      setSearchLoading(true);
+      try {
+        const items = await searchByName(q);
+        renderResults(items);
+      } catch (err) {
+        console.error(err);
+        showError('Vyhledávání se nezdařilo. Zkuste to prosím znovu.');
+      } finally {
+        setSearchLoading(false);
+      }
+    });
+
+    document.getElementById('resetButton').addEventListener('click', () => {
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+      clearError();
+      document.getElementById('query').value = '';
+      document.getElementById('query').focus();
+      state.ico = null;
+      state.companyName = null;
+      updateActiveClientBadge();
+    });
+
+    // ------------------------------------------------------------------
+    // MODUL 2: ZÁPIS Z AUTA (Web Speech API + fallback)
+    // ------------------------------------------------------------------
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      document.getElementById('dictateButton').classList.add('hidden');
+      document.getElementById('voiceUnsupportedNote').classList.remove('hidden');
+    }
+
+    function startListening() {
+      if (!SpeechRecognitionAPI) return;
+      const rec = new SpeechRecognitionAPI();
+      rec.lang = 'cs-CZ';
+      rec.interimResults = false;
+      const btn = document.getElementById('dictateButton');
+      btn.disabled = true;
+      btn.textContent = '🎙️ Poslouchám…';
+      rec.onresult = e => {
+        const transcript = e.results[0][0].transcript;
+        const field = document.getElementById('voiceInput');
+        field.value = field.value.trim() ? `${field.value.trim()}\n${transcript}` : transcript;
+      };
+      rec.onerror = () => { /* tichý fallback – uživatel může psát ručně */ };
+      rec.onend = () => { btn.disabled = false; btn.textContent = '🎤 Diktovat'; };
+      try { rec.start(); } catch { btn.disabled = false; btn.textContent = '🎤 Diktovat'; }
+    }
+
+    // ------------------------------------------------------------------
+    // ZDARMA: pravidlová normalizace poznámky + odvození dalšího kroku
+    // (žádné volání na externí API, žádné náklady)
+    // ------------------------------------------------------------------
+    const SLANG_REPLACEMENTS = [
+      [/\bteďka\b/gi, 'aktuálně'],
+      [/\bzrovna teď\b/gi, 'aktuálně'],
+      [/\bzrovna\b/gi, 'aktuálně'],
+      [/\bnepotřebuju\b/gi, 'nepotřebuje'],
+      [/\bpotřebuju\b/gi, 'potřebuje'],
+      [/\bchcou\b/gi, 'chtějí'],
+      [/\bnazvat\b/gi, 'kontaktovat'],
+      [/\bozvat\b/gi, 'kontaktovat'],
+      [/\bkoukat\b/gi, 'zvážit'],
+      [/\bmrknout\b/gi, 'posoudit']
+    ];
+
+    function humanizeNotes(raw) {
+      let text = raw.trim();
+      SLANG_REPLACEMENTS.forEach(([pattern, repl]) => { text = text.replace(pattern, repl); });
+      // první písmeno velké, tečka na konci, pokud chybí
+      text = text.charAt(0).toUpperCase() + text.slice(1);
+      if (!/[.!?]\s*$/.test(text)) text += '.';
+      return text;
+    }
+
+    const MONTHS = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+
+    function detectNextStep(rawLower) {
+      // 1) zmínka konkrétního měsíce -> follow-up k danému termínu
+      const foundMonth = MONTHS.find(m => rawLower.includes(m) || rawLower.includes(m.slice(0, -1)));
+      if (foundMonth) {
+        return `Follow-up – kontaktovat klienta dle domluveného termínu (${foundMonth}).`;
+      }
+      // 2) klient výslovně nic nepotřebuje / bez požadavků
+      if (/nic\s+(ne)?pot(ř|r)ebuj/.test(rawLower) || /(zatím|aktuálně)\s+nic/.test(rawLower) || /bez\s+(nov(ý|é)ch\s+)?požadavk/.test(rawLower)) {
+        return 'Follow-up – klient aktuálně bez konkrétních požadavků, kontaktovat dle domluveného termínu.';
+      }
+      // 3) konkrétní bankovní produkt v textu -> připravit nabídku
+      const products = [
+        ['překlenovac', 'překlenovací úvěr'],
+        ['investiční úvěr', 'investiční úvěr'],
+        ['úvěr', 'úvěrové financování'],
+        ['kontokorent', 'kontokorent'],
+        ['leasing', 'leasing'],
+        ['faktoring', 'faktoring'],
+        ['platební brán', 'platební bránu'],
+        ['kart', 'firemní platební kartu'],
+        ['účet', 'založení účtu']
+      ];
+      const match = products.find(([kw]) => rawLower.includes(kw));
+      if (match) {
+        return `Připravit nabídku – ${match[1]}.`;
+      }
+      // 4) fallback
+      return 'Ověřit s klientem další kroky a naplánovat follow-up.';
+    }
+
+    function processCrmAndMail() {
+      const val = document.getElementById('voiceInput').value.trim();
+      if (!val) return;
+
+      const today = new Intl.DateTimeFormat('cs-CZ').format(new Date());
+      const humanized = humanizeNotes(val);
+      const nextStep = detectNextStep(val.toLowerCase());
+
+      document.getElementById('crmOutputText').textContent =
+        `Datum: ${today}\n` +
+        `Klient: ${state.companyName || 'Neuvedeno'}\n` +
+        `Jednání: ${humanized}\n` +
+        `Další krok: ${nextStep}`;
+
+      document.getElementById('mailSubject').value = `Shrnutí naší schůzky${state.companyName ? ' – ' + state.companyName : ''}`;
+      document.getElementById('mailBodyText').value =
+        `Dobrý den,\n\n` +
+        `děkuji za dnešní schůzku${state.companyName ? ` se společností ${state.companyName}` : ''}.\n\n` +
+        `${humanized}\n\n` +
+        `${nextStep}\n\n` +
+        `V případě dotazů jsem Vám k dispozici.\n\n` +
+        `S pozdravem,`;
+
+      switchTab('crm');
+    }
+
+    // ------------------------------------------------------------------
+    // MODUL 3: E-MAIL
+    // ------------------------------------------------------------------
+    document.getElementById('sendMailBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      const to = document.getElementById('clientEmail').value.trim();
+      const subject = document.getElementById('mailSubject').value.trim() || 'Shrnutí naší schůzky';
+      const body = document.getElementById('mailBodyText').value;
+      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    });
+
+    document.getElementById('copyMailBtn').addEventListener('click', async () => {
+      const body = document.getElementById('mailBodyText').value;
+      const confirmEl = document.getElementById('copyConfirm');
+      try {
+        await navigator.clipboard.writeText(body);
+        confirmEl.classList.remove('hidden');
+        setTimeout(() => confirmEl.classList.add('hidden'), 2000);
+      } catch {
+        // Fallback pro prohlížeče bez Clipboard API
+        const ta = document.getElementById('mailBodyText');
+        ta.select();
+        document.execCommand('copy');
+        confirmEl.classList.remove('hidden');
+        setTimeout(() => confirmEl.classList.add('hidden'), 2000);
+      }
+    });
+  </script>
+</body>
+</html>
